@@ -1,123 +1,196 @@
 import pandas as pd
 import numpy as np
-from cumulative_stats import CumulativeStats, NaNPolicy, compute_cumsum, compute_cumprod, compute_cummax
+from cumulative_stats import (
+    CumulativeStats,
+    NaNPolicy,
+    compute_cumsum,
+    compute_cumprod,
+    compute_cummax,
+    groupby_compute_cumsum,
+    groupby_compute_cumprod,
+    groupby_compute_cummax,
+    groupby_compute_all_stats
+)
 
-print("=" * 70)
-print("累计统计服务使用示例 (含分组累计和空值处理修复)")
-print("=" * 70)
+print("=" * 75)
+print(" 分组累计功能使用示例")
+print("=" * 75)
 
-print("\n1. 使用列表数据 - 面向对象方式")
-print("-" * 50)
-data = [1, 2, 3, 4, 5]
-print(f"原始数据: {data}")
-
-stats = CumulativeStats(data)
-print(f"\n累计和 (cumsum): {list(stats.cumsum()['value'])}")
-print(f"累计乘积 (cumprod): {list(stats.cumprod()['value'])}")
-print(f"累计最大值 (cummax): {list(stats.cummax()['value'])}")
-print(f"累计最小值 (cummin): {list(stats.cummin()['value'])}")
-
-print("\n2. 使用 DataFrame 数据")
-print("-" * 50)
-df = pd.DataFrame({
-    '销售额': [100, 200, 150, 300, 250],
-    '订单数': [5, 8, 6, 12, 10]
-}, index=['周一', '周二', '周三', '周四', '周五'])
+print("\n【示例 1】基础分组累计和 - 每个分组内独立累计")
+print("-" * 60)
+df1 = pd.DataFrame({
+    '部门': ['销售部', '销售部', '销售部', '技术部', '技术部', '技术部'],
+    '月度业绩': [100, 200, 150, 80, 120, 90]
+})
 print("原始数据:")
-print(df)
+print(df1.to_string(index=False))
 
-stats2 = CumulativeStats(df)
-print("\n累计和 (cumsum):")
-print(stats2.cumsum())
-print("\n累计最大值 (cummax):")
-print(stats2.cummax())
+stats1 = CumulativeStats(df1)
+result1 = stats1.groupby_cumsum(groupby='部门')
+print("\n按部门分组累计和 (每个部门独立累计):")
+print(result1.to_string(index=False))
 
-print("\n3. 一次性获取所有统计结果")
-print("-" * 50)
-all_results = stats2.all_stats()
-for name, result in all_results.items():
-    print(f"\n{name}:")
-    print(result)
-
-print("\n4. 使用便捷函数 - 函数式方式")
-print("-" * 50)
-data2 = [3, 1, 4, 1, 5, 9, 2, 6]
-print(f"原始数据: {data2}")
-print(f"累计和: {list(compute_cumsum(data2)['value'])}")
-print(f"累计乘积: {list(compute_cumprod(data2)['value'])}")
-print(f"累计最大值: {list(compute_cummax(data2)['value'])}")
-
-print("\n5. 空值处理策略 (NaNPolicy)")
-print("-" * 50)
-data3 = [1, np.nan, 3, np.nan, 5]
-stats3 = CumulativeStats(data3)
-print(f"原始数据: {data3}")
-
-print("\n  5.1 PRESERVE 策略 (保留空值位置):")
-result_preserve = stats3.cumsum(nan_policy=NaNPolicy.PRESERVE)
-print(f"      累计和: {list(result_preserve['value'].fillna(-1))}  (-1 表示 NaN)")
-
-print("\n  5.2 FILL_FORWARD 策略 (前值填充，累计不中断):")
-result_fill = stats3.cumsum(nan_policy=NaNPolicy.FILL_FORWARD)
-print(f"      累计和: {list(result_fill['value'])}")
-
-print("\n  5.3 skipna=False (遇到 NaN 后全部为 NaN):")
-result_no_skip = stats3.cumsum(skipna=False)
-print(f"      累计和: {list(result_no_skip['value'])}")
-
-print("\n6. 分组累计 (groupby) - Bug 修复展示")
-print("-" * 50)
-df_grouped = pd.DataFrame({
+print("\n【示例 2】分组累计 + 空值处理 (两种策略)")
+print("-" * 60)
+df2 = pd.DataFrame({
     '部门': ['销售部', '销售部', '销售部', '销售部',
              '技术部', '技术部', '技术部', '技术部'],
     '月度业绩': [100, np.nan, 150, 200, 80, np.nan, np.nan, 120]
 })
 print("原始数据 (含空值):")
-print(df_grouped.to_string(index=False))
+print(df2.to_string(index=False))
 
-stats_grouped = CumulativeStats(df_grouped)
+stats2 = CumulativeStats(df2)
 
-print("\n  6.1 分组累计和 - PRESERVE (保留空值):")
-result1 = stats_grouped.cumsum(groupby='部门', nan_policy=NaNPolicy.PRESERVE)
-print(result1.to_string(index=False))
+print("\n  2.1 PRESERVE 策略 (保留空值位置，累计继续):")
+result2a = stats2.groupby_cumsum(groupby='部门', nan_policy=NaNPolicy.PRESERVE)
+print(result2a.to_string(index=False))
 
-print("\n  6.2 分组累计和 - FILL_FORWARD (前值填充，累计不中断):")
-result2 = stats_grouped.cumsum(groupby='部门', nan_policy=NaNPolicy.FILL_FORWARD)
-print(result2.to_string(index=False))
+print("\n  2.2 FILL_FORWARD 策略 (前值填充，累计不中断):")
+result2b = stats2.groupby_cumsum(groupby='部门', nan_policy=NaNPolicy.FILL_FORWARD)
+print(result2b.to_string(index=False))
 
-print("\n  6.3 分组累计最大值 - FILL_FORWARD:")
-result3 = stats_grouped.cummax(groupby='部门', nan_policy=NaNPolicy.FILL_FORWARD)
-print(result3.to_string(index=False))
-
-print("\n7. 多列分组累计")
-print("-" * 50)
-df_multi = pd.DataFrame({
-    '区域': ['华东', '华东', '华东', '华东', '华南', '华南', '华南', '华南'],
-    '产品': ['A', 'A', 'B', 'B', 'A', 'A', 'B', 'B'],
-    '销量': [10, 20, 15, 25, 30, np.nan, 40, 50]
+print("\n【示例 3】多种分组累计统计 (累计乘积/最大值/最小值)")
+print("-" * 60)
+df3 = pd.DataFrame({
+    '股票': ['AAPL', 'AAPL', 'AAPL', 'GOOGL', 'GOOGL', 'GOOGL'],
+    '日收益率': [0.05, -0.02, 0.03, 0.04, 0.01, -0.01]
 })
-print("原始数据 (按区域+产品分组):")
-print(df_multi.to_string(index=False))
+df3['日收益倍数'] = 1 + df3['日收益率']
+print("原始数据 (股票日收益):")
+print(df3.to_string(index=False))
 
-stats_multi = CumulativeStats(df_multi)
-result_multi = stats_multi.cumsum(groupby=['区域', '产品'], nan_policy=NaNPolicy.FILL_FORWARD)
-print("\n分组累计和 (前值填充):")
-print(result_multi.to_string(index=False))
+stats3 = CumulativeStats(df3)
 
-print("\n8. 按行累计 (axis=1)")
-print("-" * 50)
-df2 = pd.DataFrame({
-    'Q1': [100, 200, 300],
-    'Q2': [150, 180, 250],
-    'Q3': [200, 220, 280],
-    'Q4': [250, 300, 350]
-}, index=['产品A', '产品B', '产品C'])
-print("原始数据 (季度销售额):")
-print(df2)
-stats4 = CumulativeStats(df2)
-print("\n按行累计和 (年度累计):")
-print(stats4.cumsum(axis=1))
+print("\n  3.1 分组累计乘积 (累计收益倍数):")
+result3a = stats3.groupby_cumprod(groupby='股票', value_cols='日收益倍数')
+print(result3a.to_string(index=False))
 
-print("\n" + "=" * 70)
-print("示例运行完成！")
-print("=" * 70)
+print("\n  3.2 分组累计最大值 (历史最高收益倍数):")
+result3b = stats3.groupby_cummax(groupby='股票', value_cols='日收益倍数')
+print(result3b.to_string(index=False))
+
+print("\n  3.3 分组累计最小值 (历史最低收益倍数):")
+result3c = stats3.groupby_cummin(groupby='股票', value_cols='日收益倍数')
+print(result3c.to_string(index=False))
+
+print("\n【示例 4】多列分组 (按区域+产品维度分组)")
+print("-" * 60)
+df4 = pd.DataFrame({
+    '月份': ['1月', '1月', '1月', '1月', '2月', '2月', '2月', '2月'],
+    '区域': ['华东', '华东', '华南', '华南', '华东', '华东', '华南', '华南'],
+    '产品': ['A', 'B', 'A', 'B', 'A', 'B', 'A', 'B'],
+    '销量': [100, 200, 150, 180, 120, 220, 160, 200]
+})
+print("原始数据 (多维度销售数据):")
+print(df4.to_string(index=False))
+
+stats4 = CumulativeStats(df4)
+result4 = stats4.groupby_cumsum(groupby=['区域', '产品'])
+print("\n按【区域+产品】分组累计销量:")
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', 200)
+print(result4.to_string(index=False))
+pd.reset_option('display.max_columns')
+pd.reset_option('display.width')
+
+print("\n【示例 5】选择特定列进行累计 (value_cols)")
+print("-" * 60)
+df5 = pd.DataFrame({
+    '日期': pd.date_range('2024-01-01', periods=6, freq='D'),
+    '区域': ['华东', '华东', '华东', '华南', '华南', '华南'],
+    '销售额': [1000, 1500, 1200, 800, 900, 1100],
+    '订单数': [10, 15, 12, 8, 9, 11],
+    '利润': [200, 300, 240, 160, 180, 220]
+})
+print("原始数据 (多列指标):")
+print(df5.to_string(index=False))
+
+stats5 = CumulativeStats(df5)
+
+print("\n  5.1 只对【销售额】进行累计，其他列保持不变:")
+result5a = stats5.groupby_cumsum(groupby='区域', value_cols='销售额')
+print(result5a.to_string(index=False))
+
+print("\n  5.2 对【销售额, 订单数】进行累计，【利润】不变:")
+result5b = stats5.groupby_cumsum(groupby='区域', value_cols=['销售额', '订单数'])
+print(result5b.to_string(index=False))
+
+print("\n【示例 6】一次性获取所有分组统计结果 (groupby_all_stats)")
+print("-" * 60)
+df6 = pd.DataFrame({
+    '小组': ['甲', '甲', '甲', '乙', '乙', '乙'],
+    '得分': [85, 90, 88, 78, 82, 80]
+})
+print("原始数据 (小组得分):")
+print(df6.to_string(index=False))
+
+stats6 = CumulativeStats(df6)
+result6 = stats6.groupby_all_stats(groupby='小组')
+for name, res in result6.items():
+    print(f"\n  分组{name}:")
+    print(res.to_string(index=False))
+
+print("\n【示例 7】便捷函数方式调用 (groupby_compute_*)")
+print("-" * 60)
+df7 = pd.DataFrame({
+    '类别': ['X', 'X', 'Y', 'Y'],
+    '价值': [10, 20, 30, 40]
+})
+print("原始数据:")
+print(df7.to_string(index=False))
+
+print("\n  7.1 groupby_compute_cumsum (分组累计和):")
+res7a = groupby_compute_cumsum(df7, groupby='类别')
+print(res7a.to_string(index=False))
+
+print("\n  7.2 groupby_compute_cumprod (分组累计乘积):")
+res7b = groupby_compute_cumprod(df7, groupby='类别')
+print(res7b.to_string(index=False))
+
+print("\n  7.3 groupby_compute_cummax (分组累计最大值):")
+res7c = groupby_compute_cummax(df7, groupby='类别')
+print(res7c.to_string(index=False))
+
+print("\n【示例 8】混合使用 groupby 参数 (通用方法方式)")
+print("-" * 60)
+df8 = pd.DataFrame({
+    '组': ['G1', 'G1', 'G2', 'G2'],
+    '值': [1, 2, 3, 4]
+})
+print("原始数据:")
+print(df8.to_string(index=False))
+
+stats8 = CumulativeStats(df8)
+print("\n使用 cumsum(groupby='组') 通用方式:")
+result8 = stats8.cumsum(groupby='组')
+print(result8.to_string(index=False))
+
+print("\n【示例 9】真实业务场景 - 区域月度销售报表")
+print("-" * 60)
+np.random.seed(42)
+dates = pd.date_range('2024-01-01', periods=12, freq='ME')
+regions = ['华北', '华北', '华北', '华北', '华东', '华东', '华东', '华东', '华南', '华南', '华南', '华南']
+sales_values = np.random.randint(50, 200, size=12).astype(float)
+sales_values[[2, 6, 9]] = np.nan
+df9 = pd.DataFrame({
+    '月份': dates.strftime('%Y-%m'),
+    '区域': regions,
+    '销售额': sales_values,
+    '订单数': np.random.randint(5, 30, size=12)
+})
+print("原始销售数据 (含缺失月份):")
+print(df9.to_string(index=False))
+
+stats9 = CumulativeStats(df9)
+result9 = stats9.groupby_cumsum(
+    groupby='区域',
+    nan_policy=NaNPolicy.FILL_FORWARD,
+    value_cols=['销售额', '订单数']
+)
+print("\n按区域分组累计 (空值填充前值):")
+print(result9.to_string(index=False))
+
+print("\n" + "=" * 75)
+print(" 示例运行完成！")
+print("=" * 75)

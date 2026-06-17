@@ -7,7 +7,11 @@ from cumulative_stats import (
     compute_cumsum,
     compute_cumprod,
     compute_cummax,
-    compute_all_stats
+    compute_all_stats,
+    groupby_compute_cumsum,
+    groupby_compute_cumprod,
+    groupby_compute_cummax,
+    groupby_compute_all_stats
 )
 
 
@@ -322,6 +326,234 @@ class TestConvenienceFunctions:
         })
         result = compute_cumsum(df, groupby='group', nan_policy=NaNPolicy.FILL_FORWARD)
         assert list(result['value']) == [1, 2, 5, 4, 8, 14]
+
+
+class TestGroupedMethods:
+    def test_groupby_cumsum_basic(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'value': [1, 2, 3, 4]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumsum(groupby='group')
+        assert list(result['value']) == [1, 3, 3, 7]
+
+    def test_groupby_cumprod_basic(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'value': [1, 2, 3, 4]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumprod(groupby='group')
+        assert list(result['value']) == [1, 2, 3, 12]
+
+    def test_groupby_cummax_basic(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'value': [3, 1, 2, 5]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cummax(groupby='group')
+        assert list(result['value']) == [3, 3, 2, 5]
+
+    def test_groupby_cummin_basic(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'value': [3, 1, 5, 2]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cummin(groupby='group')
+        assert list(result['value']) == [3, 1, 5, 2]
+
+    def test_groupby_all_stats(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'value': [1, 2, 3, 4]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_all_stats(groupby='group')
+        assert 'cumsum' in result
+        assert 'cumprod' in result
+        assert 'cummax' in result
+        assert 'cummin' in result
+        assert list(result['cumsum']['value']) == [1, 3, 3, 7]
+        assert list(result['cumprod']['value']) == [1, 2, 3, 12]
+
+    def test_groupby_with_nan_preserve(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'A', 'B', 'B', 'B'],
+            'value': [1, np.nan, 3, 4, np.nan, 6]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumsum(groupby='group', nan_policy=NaNPolicy.PRESERVE)
+        vals = list(result['value'].fillna(-999))
+        assert vals == [1, -999, 4, 4, -999, 10]
+
+    def test_groupby_with_nan_fill_forward(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'A', 'B', 'B', 'B'],
+            'value': [1, np.nan, 3, 4, np.nan, 6]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumsum(groupby='group', nan_policy=NaNPolicy.FILL_FORWARD)
+        assert list(result['value']) == [1, 2, 5, 4, 8, 14]
+
+    def test_groupby_multi_group_cols(self):
+        df = pd.DataFrame({
+            'region': ['N', 'N', 'N', 'S', 'S'],
+            'product': ['X', 'X', 'Y', 'X', 'X'],
+            'value': [1, 2, 3, 4, 5]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumsum(groupby=['region', 'product'])
+        assert list(result['value']) == [1, 3, 3, 4, 9]
+
+
+class TestValueColsSelection:
+    def test_value_cols_single_string(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'sales': [100, 200, 150, 250],
+            'orders': [5, 8, 6, 10]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumsum(groupby='group', value_cols='sales')
+        assert list(result['sales']) == [100, 300, 150, 400]
+        assert list(result['orders']) == [5, 8, 6, 10]
+
+    def test_value_cols_list(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'sales': [100, 200, 150, 250],
+            'orders': [5, 8, 6, 10]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumsum(groupby='group', value_cols=['sales'])
+        assert list(result['sales']) == [100, 300, 150, 400]
+        assert list(result['orders']) == [5, 8, 6, 10]
+
+    def test_value_cols_multiple(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'sales': [100, 200, 150, 250],
+            'orders': [5, 8, 6, 10],
+            'profit': [20, 40, 30, 50]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumsum(groupby='group', value_cols=['sales', 'orders'])
+        assert list(result['sales']) == [100, 300, 150, 400]
+        assert list(result['orders']) == [5, 13, 6, 16]
+        assert list(result['profit']) == [20, 40, 30, 50]
+
+    def test_value_cols_without_groupby(self):
+        df = pd.DataFrame({
+            'A': [1, 2, 3, 4],
+            'B': [10, 20, 30, 40],
+            'C': [100, 200, 300, 400]
+        })
+        stats = CumulativeStats(df)
+        result = stats.cumsum(value_cols=['A', 'B'])
+        assert list(result['A']) == [1, 3, 6, 10]
+        assert list(result['B']) == [10, 30, 60, 100]
+        assert list(result['C']) == [100, 200, 300, 400]
+
+    def test_all_stats_with_value_cols(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'sales': [100, 200, 150, 250],
+            'orders': [5, 8, 6, 10]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_all_stats(groupby='group', value_cols=['sales'])
+        assert list(result['cumsum']['sales']) == [100, 300, 150, 400]
+        assert list(result['cumsum']['orders']) == [5, 8, 6, 10]
+        assert list(result['cummax']['sales']) == [100, 200, 150, 250]
+
+
+class TestGroupedConvenienceFunctions:
+    def test_groupby_compute_cumsum(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'value': [1, 2, 3, 4]
+        })
+        result = groupby_compute_cumsum(df, groupby='group')
+        assert list(result['value']) == [1, 3, 3, 7]
+
+    def test_groupby_compute_cumprod(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'value': [1, 2, 3, 4]
+        })
+        result = groupby_compute_cumprod(df, groupby='group')
+        assert list(result['value']) == [1, 2, 3, 12]
+
+    def test_groupby_compute_cummax(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'value': [3, 1, 2, 5]
+        })
+        result = groupby_compute_cummax(df, groupby='group')
+        assert list(result['value']) == [3, 3, 2, 5]
+
+    def test_groupby_compute_all_stats(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'value': [1, 2, 3, 4]
+        })
+        result = groupby_compute_all_stats(df, groupby='group')
+        assert 'cumsum' in result
+        assert 'cumprod' in result
+        assert list(result['cumsum']['value']) == [1, 3, 3, 7]
+
+    def test_groupby_compute_cumsum_with_value_cols(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'B', 'B'],
+            'sales': [100, 200, 150, 250],
+            'orders': [5, 8, 6, 10]
+        })
+        result = groupby_compute_cumsum(df, groupby='group', value_cols='sales')
+        assert list(result['sales']) == [100, 300, 150, 400]
+        assert list(result['orders']) == [5, 8, 6, 10]
+
+    def test_groupby_compute_cumsum_nan_fill_forward(self):
+        df = pd.DataFrame({
+            'group': ['A', 'A', 'A', 'B', 'B', 'B'],
+            'value': [1, np.nan, 3, 4, np.nan, 6]
+        })
+        result = groupby_compute_cumsum(df, groupby='group', nan_policy=NaNPolicy.FILL_FORWARD)
+        assert list(result['value']) == [1, 2, 5, 4, 8, 14]
+
+
+class TestComplexRealWorldScenarios:
+    def test_sales_report_scenario(self):
+        df = pd.DataFrame({
+            '日期': pd.date_range('2024-01-01', periods=6, freq='D'),
+            '区域': ['华东', '华东', '华东', '华南', '华南', '华南'],
+            '销售额': [1000, 1500, 1200, 800, np.nan, 1100],
+            '订单数': [10, 15, 12, 8, np.nan, 11]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumsum(
+            groupby='区域',
+            nan_policy=NaNPolicy.FILL_FORWARD,
+            value_cols=['销售额', '订单数']
+        )
+        assert list(result['销售额']) == [1000, 2500, 3700, 800, 1600, 2700]
+        assert list(result['订单数']) == [10, 25, 37, 8, 16, 27]
+
+    def test_multi_product_multi_region(self):
+        df = pd.DataFrame({
+            '月份': ['1月', '1月', '1月', '1月', '2月', '2月', '2月', '2月'],
+            '区域': ['北京', '北京', '上海', '上海', '北京', '北京', '上海', '上海'],
+            '产品': ['A', 'B', 'A', 'B', 'A', 'B', 'A', 'B'],
+            '销量': [100, 200, 150, 180, 120, np.nan, 160, 200]
+        })
+        stats = CumulativeStats(df)
+        result = stats.groupby_cumsum(
+            groupby=['区域', '产品'],
+            nan_policy=NaNPolicy.FILL_FORWARD
+        )
+        assert list(result['销量']) == [100, 200, 150, 180, 220, 400, 310, 380]
 
 
 if __name__ == '__main__':
